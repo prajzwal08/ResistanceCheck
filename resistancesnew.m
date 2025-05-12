@@ -83,7 +83,7 @@ function [resist_out] = resistancesnew(resist_in)
 
     % rbs       =  resist_in.rbs;
     % rss       =  resist_in.rss;
-    rwc       =  resist_in.rwc;
+    % rwc       =  resist_in.rwc;
 
     z0m       =  resist_in.zo;
     d         =  resist_in.d;
@@ -93,7 +93,7 @@ function [resist_out] = resistancesnew(resist_in)
     nl        =  resist_in.nl;
 
     p         = resist_in.p*0.1;
-    Ta        = resist_in.Ta;
+    % Ta        = resist_in.Ta;
     Ts        = resist_in.Ts ;
     Tsh       = Ts(1)+273.15;
     Tsu       = Ts(2)+273.15;
@@ -104,7 +104,7 @@ function [resist_out] = resistancesnew(resist_in)
     k_mu_soil_sh  = 1.327 * 10^(-5) * (po/p) * (Tsh/To); % KInematic viscosity 
     k_mu_soil_su  = 1.327 * 10^(-5) * (po/p) * (Tsu/To); % KInematic viscosity
 
-    nd = nl+1; % no of nodes for height of canopy
+    % nd = nl+1; % no of nodes for height of canopy
     dh = (h / nl) * ones(nl, 1); % incremental change of height in each layer 
     h_cum = flip([0; cumsum(dh)]); % Decreasing from top, zero at ground, hc at height of canopy 
     h_mid = (h_cum(1:end-1) + h_cum(2:end)) / 2; % At the mid of layer
@@ -132,7 +132,7 @@ function [resist_out] = resistancesnew(resist_in)
     ph_zr       = psih(zr - d, L, unst, st) .* (z >= zr) + ph_z .* (z < zr);
     phs_zr      = phstar(zr, zr, d, L, st, unst);
     phs_h       = phstar(h, zr, d, L, st, unst);
-    phih_z      = phih(z,L,unst,st);
+    % phih_z      = phih(z,L,unst,st);
 
     ustar       = max(.001, kappa * u ./ (log((z - d) / z0m) - pm_z)); %          W&V Eq 30
     
@@ -166,7 +166,7 @@ function [resist_out] = resistancesnew(resist_in)
     raws = h * sinh(n) ./ (n * Kh) * (log((exp(n * (h) / h) - 1) / (exp(n * (h) / h) + 1)) - log((exp(n * (.01) / h) - 1) / (exp(n * (.01) / h) + 1))); % W&V Eq 43 from d of soil to height of canopy
     rbl = 70*sqrt(w./uz);  % WV Eq 31
     rbc = rbl./dLAI; % From leaf to canopy
-    rbc = rbl;
+    
     % rbc = 70 / LAI * sqrt(w ./ uz0);                        %       W&V Eq 31, but slightly different
     rbsh = St_nu_sh / (kappa * ustar); % Boundary layer resistance of soil for bare soil.
     rbsu = St_nu_su / (kappa * ustar); % Boundary layer resistance of soil for bare soil.
