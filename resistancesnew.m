@@ -93,17 +93,25 @@ function [resist_out] = resistancesnew(resist_in)
     nl        =  resist_in.nl;
 
     p         = resist_in.p*0.1;
-    % Ta        = resist_in.Ta;
+    Ta        = resist_in.Ta + 273.15; % Ambient Temperature (K)
     Ts        = resist_in.Ts ;
     Tsh       = Ts(1)+273.15;
     Tsu       = Ts(2)+273.15;
+    % Average over first two dimensions (13 and 36) for each time step
+    Tcu = squeeze(mean(mean(resist_in.Tcu, 1), 2)) + 273.15;  % Result is 30x1 later in the ebal, it is again changed to 13 by 36 by30.  (Temp sunlit, per layer)
+    Tch      = resist_in.Tch + 273.15; % Canopy temperature (K, shaded)
+% Optionally store it
+    
     po        = 101.3; % Ambient pressure (kPa)
     To        = 273.15; % Ambient Temperature (K)
     h_soil = 0.01; % roughness height of soil
     
-    k_mu_soil_sh  = 1.327 * 10^(-5) * (po/p) * (Tsh/To); % KInematic viscosity 
-    k_mu_soil_su  = 1.327 * 10^(-5) * (po/p) * (Tsu/To); % KInematic viscosity
+    k_mu_0 = 1.327 * 10^(-5); %At To and Po, Kinematic viscosity (m2/s).
+    k_mu_soil_sh  = k_mu_0 * (po/p) * (Tsh/To)^(1.81); % KInematic viscosity 
+    k_mu_soil_su  = k_mu_0 * (po/p) * (Tsu/To)^(1.81); % KInematic viscosity
 
+    % fac = (po/p) * (Ta/To)^(1.81); % factor of correction for kinematic viscosity and diffusivity. 
+    
     % nd = nl+1; % no of nodes for height of canopy
     dh = (h / nl) * ones(nl, 1); % incremental change of height in each layer 
     h_cum = flip([0; cumsum(dh)]); % Decreasing from top, zero at ground, hc at height of canopy 
@@ -163,26 +171,37 @@ function [resist_out] = resistancesnew(resist_in)
     rar = 1 ./ (kappa * ustar) .*  ((zr - h) / (zr - d))      - phs_zr + phs_h; % W&V Eq 39
     % rac = calculate_rac(h,n_layer,Kh,h_mid); % W&V Eq 42
     rawc = calculate_rac_nlayer(h,n_layer,Kh,h_mid);
-    raws = h * sinh(n) ./ (n * Kh) * (log((exp(n * (h) / h) - 1) / (exp(n * (h) / h) + 1)) - log((exp(n * (.01) / h) - 1) / (exp(n * (.01) / h) + 1))); % W&V Eq 43 from d of soil to height of canopy
-    rbl = 70*sqrt(w./uz);  % WV Eq 31
-    rbc = rbl./dLAI; % From leaf to canopy
     
+    raws = h * sinh(n) ./ (n * Kh) * (log((exp(n * (h) / h) - 1) / (exp(n * (h) / h) + 1)) - log((exp(n * (.01) / h) - 1) / (exp(n * (.01) / h) + 1))); % W&V Eq 43 from d of soil to height of canopy
+   
+    % BOundary layer resistance of leaf.
+ % Boundary layer resistance for shaded (ch) layers
+    % rblch = calculate_rbl(uz, w, Tch, Ta, p); % Boundary layer resistance of leaf (shaded)
+    % rblcu = calculate_rbl(uz, w, Tcu, Ta, p); % Boundary layer resistance of leaf (sunlit)
+    % rbsh =  calculate_rbl(u_soil,z0m,Tsh,Ta,p);% Boundary layer resistance of soil (shaded)
+    % rbsu =  calculate_rbl(u_soil,z0m,Tsu,Ta,p); %Boundary layer resistance of soil (sunlit)
+    rbl = 70*sqrt(w./uz);  % WV Eq 31
+    rblcu = rbl;
+    rblch = rbl;
+    % rbc = rbl./dLAI; % From leaf to canopy
+    rabs = (log(z/z0m) - psim(z, L, unst, st))^2 / (kappa^2 * u);
+
     % rbc = 70 / LAI * sqrt(w ./ uz0);                        %       W&V Eq 31, but slightly different
-    rbsh = St_nu_sh / (kappa * ustar); % Boundary layer resistance of soil for bare soil.
-    rbsu = St_nu_su / (kappa * ustar); % Boundary layer resistance of soil for bare soil.
+    rbsh = St_nu_sh / (kappa * ustar); % Boundary layer resistance of soil for shaded soil.
+    rbsu = St_nu_su / (kappa * ustar); % Boundary layer resistance of soil for sunlit soil.
 
     resist_out.rai = rai;  
     resist_out.rar = rar;
     resist_out.rawc = rawc;  %WIthin canopy 
     resist_out.raws = raws;  % Soil (within canopy)
-    resist_out.rbl = rbl;   % Boundary layer of leaf
-    resist_out.rbc = rbc;   % Boundary layer of canopy integrated from leaf
+    % resist_out.rbl = rbl;   % Boundary layer of leaf
+    % resist_out.rbc = rbc;   % Boundary layer of canopy integrated from leaf
     resist_out.rbsh = rbsh;   % Boundary layer of bare soil.
     resist_out.rbsu = rbsu;   % Boundary layer of bare soil.
 
     rac  = rai + rar + rawc;  % YT(aerodynamic , within canopy)
     rash = rai + rar + raws ; % Aerodynamic (soil, within canopy (shaded))
-    rasu = rai + rar + raws;   % Boundary soil (sunlight)
+    rasu = rabs;   % Boundary soil (sunlight)
 
     resist_out.ustar = ustar;
     resist_out.u_h = uh;
@@ -191,6 +210,8 @@ function [resist_out] = resistancesnew(resist_in)
     resist_out.rash = rash;        
     resist_out.rasu = rasu;   
     resist_out.L = L;
+    resist_out.rblch = rblch; % Boundary layer resistance of leaf (shaded)
+    resist_out.rblcu = rblcu; % Boundary layer resistance of leaf (sunlit)
 
     resist_out.rac  = min(4E2, rac);         % to prevent unrealistically high resistances
     resist_out.rash = min(4E2, rash);        % to prevent unrealistically high resistances
@@ -273,3 +294,66 @@ function rac = calculate_rac_nlayer(h, n_layer, Kh, h_mid)
     % Final rac expression
     rac = h * numerator ./ denominator .* (term1 - term2);
     return
+
+function rbl = calculate_rbl(uz, w, t, ta, p)
+    % Calculate the boundary layer resistance (rbl) using W&V Eq. 31
+    % Inputs:
+    %   uz     - wind speed (vector or matrix)
+    %   w      - height of the canopy (scalar)
+    %   t      - temperature (vector or matrix)
+    %   ta     - ambient temperature (scalar)
+    %   p      - pressure (scalar)
+    % Output:
+    %   rbl    - boundary layer resistance (same size as uz)
+    
+    % Constants
+    g = 9.81;  % acceleration due to gravity (m/s^2)
+    po = 1.013e5;  % Reference pressure (Pa)
+    To = 273.15;  % Reference temperature (K)
+    k_mu_0 = 1.327 * 10^(-5); %At To and Po, Kinematic viscosity (m2/s).
+    D_V_0 = 2.12e-5;  % Diffusivity of water vapour in air (m2/s), 
+    D_H_0   = 2.12e-5;  % Diffusivity of heat in air (m2/s)
+    b1 = 1.5 ; % Empirical constant for the leaf boundary layer resistance, could be changed.
+    % D_v = 2.3e-5;  % Diffusivity of water vapor in air (m^2/s)
+    
+    
+    % Calculate correction factors for kinematic viscosity and diffusivity
+    fc = (po / p) .* (t / To).^1.81;  % correction factor for temperature and pressure
+    
+    % Update kinematic viscosity and diffusivity using correction factors
+    k_mu = k_mu_0 * fc;  % kinematic viscosity (m2/s)
+    D_H = D_H_0 * fc;    % diffusivity of heat in air (m2/s)
+    D_V = D_V_0 * fc;    % diffusivity of water vapor in air (m2/s)
+
+    % Reynolds number
+    re = uz .* w ./ k_mu;  % Reynolds number
+    
+    % Prandtl and Schmidt numbers
+    pr = k_mu ./ D_H;  % Prandtl number
+    scv = k_mu ./ D_V; % Schmidt number for water vapour
+    
+    % Grashof number (based on temperature difference between canopy and air)
+    gr = (g * w.^3 .* max(t - ta, 0)) ./ (t .* k_mu.^2);  % Grashof number
+    
+    % Forced convection (laminar and turbulent flow)
+    nu_lam = b1 * 0.66 * (pr.^0.33) .* (re.^0.5);  % Laminar flow
+    shv_lam = b1 * 0.66 * (scv.^0.33) .* (re.^0.5);
+
+
+    nu_turb = b1 * 0.036 * (pr.^0.33) .* (re.^0.8); % Turbulent flow
+    shv_turb = b1 * 0.036 * (scv.^0.33) .* (re.^0.8); % Turbulent flow
+    nu_forced = max(nu_lam, nu_turb);  % choose max between laminar and turbulent for forced convection
+    shv_forced = max(shv_lam, shv_turb);  % choose max between laminar and turbulent for forced convection
+    
+    % Free convection
+    nu_free = 0.54 * (pr.^0.25) .* (gr.^0.25);  % Free convection
+    shv_free = 0.54 * (scv.^0.25) .* (gr.^0.25);  % Free convection
+    
+    % Total nu (combined forced and free convection)
+    nu = nu_forced + nu_free;
+    shv =  shv_forced+ shv_free ;
+    
+    % Boundary layer resistance (rbl) using forced and free convection terms
+    rbl = w ./ (D_H .* nu);  % Boundary layer resistance (same size as uz)
+    return
+
